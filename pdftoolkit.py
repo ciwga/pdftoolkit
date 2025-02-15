@@ -4,11 +4,12 @@ import json
 import tkinter as tk
 from pathlib import Path
 from PyPDF2 import PdfReader, PdfWriter
+from tkinterdnd2 import TkinterDnD, DND_FILES
 from tkinter import filedialog, messagebox, ttk
 
 
 class PDFToolkitApp:
-    def __init__(self, root: tk.Tk, icon_path: Path) -> None:
+    def __init__(self, root: TkinterDnD.Tk, icon_path: Path) -> None:
         self.root = root
         self.root.title("PDF Toolkit")
         self.root.geometry("508x680")
@@ -20,20 +21,32 @@ class PDFToolkitApp:
         self.style.configure('Header.TLabel', font=('Arial', 10, 'bold'), background='#f0f0f0')
         
         self.create_widgets()
-        
+        self.setup_drag_and_drop()
+
+        self.center_window()
+
+    def center_window(self) -> None:
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f'+{x}+{y}')
+
     def create_widgets(self) -> None:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(padx=20, pady=15, fill='both', expand=True)
 
-        # 1. File Selection
+        # File Selection
         file_frame = ttk.LabelFrame(main_frame, text=" PDF File Operations ", padding=10)
         file_frame.grid(row=0, column=0, columnspan=2, sticky='ew', pady=5)
         
         self.file_path = tk.StringVar()
-        ttk.Entry(file_frame, textvariable=self.file_path, width=60).grid(row=0, column=0, padx=5)
+        self.file_entry = ttk.Entry(file_frame, textvariable=self.file_path, width=60)
+        self.file_entry.grid(row=0, column=0, padx=5)
         ttk.Button(file_frame, text="Browse", command=self.load_pdf, width=8).grid(row=0, column=1, padx=5)
 
-        # 2. Metadata Section
+        # Metadata Section
         meta_frame = ttk.LabelFrame(main_frame, text=" Metadata Editor ", padding=10)
         meta_frame.grid(row=1, column=0, sticky='nsew', pady=10)
 
@@ -48,7 +61,6 @@ class PDFToolkitApp:
             '/ModDate': tk.StringVar(),
         }
 
-        # Metadata Grid
         for i, (key, var) in enumerate(self.metadata_fields.items()):
             ttk.Label(meta_frame, text=f"{key}:", width=13, anchor='e').grid(row=i, column=0, padx=5, pady=2)
             ttk.Entry(meta_frame, textvariable=var, width=40).grid(row=i, column=1, pady=2)
@@ -60,7 +72,7 @@ class PDFToolkitApp:
         ttk.Button(btn_frame, text="Save JSON", command=self.save_json_metadata, width=14).pack(side='left', padx=3)
         ttk.Button(btn_frame, text="Load JSON", command=self.load_json_metadata, width=14).pack(side='left', padx=3)
 
-        # 3. Page Operations
+        # Page Operations
         page_frame = ttk.LabelFrame(main_frame, text=" Page Operations ", padding=10)
         page_frame.grid(row=2, column=0, sticky='ew', pady=5)
 
@@ -69,7 +81,7 @@ class PDFToolkitApp:
         ttk.Entry(page_frame, textvariable=self.page_range_var, width=30).grid(row=0, column=1, padx=10)
         ttk.Button(page_frame, text="Extract Pages", command=self.extract_pages, width=14).grid(row=0, column=2, padx=5)
 
-        # 4. Image Operations
+        # Image Operations
         img_frame = ttk.LabelFrame(main_frame, text=" Image Operations ", padding=10)
         img_frame.grid(row=3, column=0, sticky='ew', pady=5)
 
@@ -79,10 +91,9 @@ class PDFToolkitApp:
         ttk.Button(img_frame, text="Browse", command=self.choose_image_dir, width=8).grid(row=0, column=2, padx=5)
         ttk.Button(img_frame, text="Extract Images", command=self.extract_images, width=14).grid(row=1, column=2, pady=5)
 
-        # 5. Utility Buttons
+        # Utility Buttons
         util_frame = ttk.Frame(main_frame)
         util_frame.grid(row=4, column=0, sticky='ew', pady=15)
-        
         ttk.Button(util_frame, text="Clear All Fields", command=self.clear_fields, width=18).pack(side='left', padx=5)
         ttk.Button(util_frame, text="Exit", command=self.exit_app, width=18).pack(side='left', padx=5)
 
@@ -90,26 +101,60 @@ class PDFToolkitApp:
         self.status_bar = ttk.Label(main_frame, text="Ready", relief='sunken', padding=5)
         self.status_bar.grid(row=5, column=0, sticky='ew')
 
-    def load_pdf(self) -> None:
-        file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-        if not file_path:
-            return
+    def setup_drag_and_drop(self) -> None:
+        def handle_drop(event):
+            file_path = self.clean_dropped_path(event.data)
+            
+            if self.is_valid_pdf(file_path):
+                self.file_path.set(file_path)
+                self.load_pdf(file_path=file_path)
+            else:
+                self.clear_fields()
+                self.update_status("Only PDF files are allowed!", 'red')
 
-        self.file_path.set(file_path)
+        # Register drop target for entire window hierarchy
+        self.root.drop_target_register(DND_FILES)
+        self.root.dnd_bind('<<Drop>>', handle_drop)
+
+    def clean_dropped_path(self, raw_path: str) -> str:
+        path = raw_path.strip()
+        if path.startswith('{') and path.endswith('}'):
+            path = path[1:-1]
+        return path
+
+    def is_valid_pdf(self, file_path: str) -> bool:
         try:
+            with open(file_path, 'rb') as f:
+                header = f.read(5)
+                return header.hex() == '255044462d'
+        except Exception as e:
+            return False
+
+    def load_pdf(self, file_path: Path = None) -> None:
+        if not file_path:
+            file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+            if not file_path:
+                return
+            self.file_path.set(file_path)
+
+        try:
+            file_name = os.path.basename(file_path)
             reader = PdfReader(file_path)
             if not reader.pages:
                 raise ValueError("PDF contains no pages")
                 
             metadata = reader.metadata
             if metadata is None:
-                self.update_status("No metadata found in PDF.", 'orange')
+                self.clear_fields()
+                self.update_status(f"No metadata found in {file_name}", 'purple')
                 return
             for key, var in self.metadata_fields.items():
                 var.set(metadata.get(key, ""))
-            self.update_status("PDF loaded successfully", 'green')
+            self.update_status(f"Loaded: {file_name}", 'green')
+            
         except Exception as e:
             self.update_status(f"Error: {str(e)}", 'red')
+            self.file_path.set("")
 
     def update_status(self, message: str, color: str = 'black') -> None:
         self.status_bar.config(text=message, foreground=color)
@@ -333,6 +378,9 @@ class PDFToolkitApp:
 
 if __name__ == "__main__":
     icon_path = Path("assets/pdftoolkit.ico")
-    root = tk.Tk()
+    root = TkinterDnD.Tk()
+    root.withdraw()
+    root.update()
     PDFToolkitApp(root, icon_path)
+    root.after(50, root.deiconify)
     root.mainloop()
