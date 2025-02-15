@@ -11,11 +11,14 @@ PDF Toolkit is a Python application that provides a graphical user interface (GU
 - **Save and Load Metadata**: Save metadata to a JSON file and load metadata from a JSON file.
 - **Page Operations**: Extract specific pages from a PDF file and save them as a new PDF.
 - **Image Operations**: Extract images from a PDF file and save them to a specified directory.
+- **Drag and Drop**: Drag and drop PDF files directly into the application for easy loading.
+- **Window Centering**: The application window opens centered on the screen.
 
 ## Requirements
 
 - Python 3.7+
 - `PyPDF2` library
+- `tkinterdnd2` library
 
 You can install the required library using the following command:
 
